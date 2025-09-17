@@ -12,7 +12,7 @@ app.use(express.json());
 
 const upload = multer({ dest: "uploads/" });
 
-const MONGO = process.env.MONGO_URI || "mongodb://localhost:27017/proctoring";
+const MONGO = process.env.MONGO_URI || "mongodb://localhost:27017/videoProctoring";
 mongoose.connect(MONGO, { useNewUrlParser: true, useUnifiedTopology: true });
 
 const EventSchema = new mongoose.Schema({
