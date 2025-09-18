@@ -3,7 +3,6 @@ import { io } from "socket.io-client";
 
 import CandidateScreenShare from "./CandidateScreenShare";
 
-
 /*
   CandidateRTC
   - preserves previous logic (createPeerAndSendOffer, startLocalStream, reconnection)
@@ -29,6 +28,7 @@ export default function CandidateRTC({
     const socket = io(backendUrl, {
       autoConnect: true,
       reconnectionAttempts: 5,
+      withCredentials: true,
     });
     socketRef.current = socket;
 
@@ -39,7 +39,7 @@ export default function CandidateRTC({
     });
 
     socket.on("session_update", (s) => {
-      console.log("session_update", s);
+      // console.log("session_update", s);
       // If interviewer mic off, show error (we also listen for the explicit event below)
       if (s && s.interviewer && s.interviewer.connected === false) {
         // interviewer offline — this is informational
@@ -308,12 +308,12 @@ export default function CandidateRTC({
         style={{ width: 480, borderRadius: 6, background: "#000" }}
       />
       <div style={{ marginTop: 8 }}>
-        <button onClick={startAndShare}>Start & Share Camera</button>
+        {/* <button onClick={startAndShare}>Start & Share Camera</button>
         <CandidateScreenShare
           pcRef={pcRef}
           socketRef={socketRef}
           sessionId={sessionId}
-        />
+        /> */}
         {/* preserve your commented-out stop button — candidate should NOT have explicit off per requirement */}
         <span style={{ marginLeft: 12 }}>{status}</span>
       </div>

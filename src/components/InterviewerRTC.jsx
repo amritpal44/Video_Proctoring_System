@@ -32,6 +32,7 @@ export default function InterviewerRTC({
     const socket = io(backendUrl, {
       autoConnect: true,
       reconnectionAttempts: 5,
+      withCredentials: true,
     });
     socketRef.current = socket;
 
@@ -42,7 +43,7 @@ export default function InterviewerRTC({
     });
 
     socket.on("session_update", (s) => {
-      console.log("session_update", s);
+      // console.log("session_update", s);
       setSessionState(s);
       handleSessionUpdate(s);
     });
@@ -278,118 +279,157 @@ export default function InterviewerRTC({
   }
 
   return (
-    <div>
-      <h3>Interviewer (session: {sessionId})</h3>
-      {/* <video
-        ref={remoteVideoRef}
-        autoPlay
-        playsInline
-        style={{ width: "50%", borderRadius: 6, background: "#000" }}
-      />
-      <video
-        ref={remoteScreenRef}
-        autoPlay
-        playsInline
-        style={{
-          width: "50%",
-          borderRadius: 6,
-          background: "#000",
-          display: screenActive ? "block" : "none",
-        }}
-      /> */}
-
-      <div
-        style={{
-          display: "flex",
-          gap: "16px",
-          maxWidth: "100%",
-          height: "auto",
-        }}
-      >
-        <div
-          style={{
-            width: isVideoMain ? "70%" : "30%",
-            minWidth: "300px",
-            maxWidth: screenActive ? "70%" : "100%",
-          }}
-        >
+    <div className="grid grid-cols-12 gap-6">
+      <div className="col-span-8">
+        <div className="bg-black rounded-lg overflow-hidden">
           <video
             ref={remoteVideoRef}
             autoPlay
             playsInline
-            style={{
-              width: "100%",
-              height: "auto",
-              maxHeight: "70vh",
-              borderRadius: 6,
-              background: "#000",
-              objectFit: "contain",
-            }}
+            className="w-full h-[60vh] object-contain bg-black"
           />
         </div>
-        {screenActive && (
-          <div
-            style={{
-              width: isVideoMain ? "30%" : "70%",
-              minWidth: "300px",
-            }}
-          >
+        {/* {screenActive && (
+          <div className="mt-4 bg-black rounded-lg overflow-hidden">
             <video
               ref={remoteScreenRef}
               autoPlay
               playsInline
-              style={{
-                width: "100%",
-                height: "auto",
-                maxHeight: "70vh",
-                borderRadius: 6,
-                background: "#000",
-                objectFit: "contain",
-              }}
+              className="w-full h-[40vh] object-contain bg-black"
             />
           </div>
-        )}
+        )} */}
+        <div className="flex items-center gap-3 mt-4">
+          <button
+            onClick={() => setIsVideoMain(!isVideoMain)}
+            className="px-3 py-1 bg-gray-700 rounded text-gray-100"
+          >
+            Swap Focus
+          </button>
+          <button
+            onClick={() => {
+              if (socketRef.current && socketRef.current.connected)
+                socketRef.current.emit("request-offer", { sessionId });
+            }}
+            className="px-3 py-1 bg-indigo-600 rounded text-white"
+          >
+            Request Offer
+          </button>
+          <button
+            onClick={() => {
+              cleanupPeer();
+              setStatus("cleaned");
+            }}
+            className="px-3 py-1 bg-gray-700 rounded text-gray-100"
+          >
+            Reset
+          </button>
+          <button
+            onClick={toggleMic}
+            className="px-3 py-1 bg-gray-700 rounded text-gray-100"
+          >
+            {micOn ? "Mute Mic" : "Unmute Mic"}
+          </button>
+        </div>
+        <div className="mt-3">
+          <StatusPill status={status} />
+        </div>
       </div>
 
-      {screenActive && (
-        <button
-          onClick={() => setIsVideoMain(!isVideoMain)}
-          style={{ marginTop: 8 }}
-        >
-          Swap Focus
-        </button>
-      )}
+      <aside className="col-span-4">
+        <div className="bg-gray-800 rounded-lg p-4 space-y-4">
+          <h4 className="text-lg font-semibold">Session Details</h4>
+          <div className="text-sm text-gray-300">
+            <p>
+              <span className="text-gray-400">Session ID:</span>{" "}
+              <span className="font-mono text-indigo-300">{sessionId}</span>
+            </p>
+            <p>
+              <span className="text-gray-400">Interview ID:</span>{" "}
+              <span className="font-mono">
+                {sessionState?.interviewId || "—"}
+              </span>
+            </p>
+            <p>
+              <span className="text-gray-400">Last update:</span>{" "}
+              {sessionState?.lastUpdate
+                ? new Date(sessionState.lastUpdate).toLocaleString()
+                : "—"}
+            </p>
+          </div>
 
-      <div style={{ marginTop: 8 }}>
-        <span style={{ marginRight: 12 }}>Status: {status}</span>
-        <button
-          onClick={() => {
-            if (socketRef.current && socketRef.current.connected)
-              socketRef.current.emit("request-offer", { sessionId });
-          }}
-        >
-          Request Offer
-        </button>
-        <button
-          onClick={() => {
-            cleanupPeer();
-            setStatus("cleaned");
-          }}
-          style={{ marginLeft: 8 }}
-        >
-          Reset Connection
-        </button>
+          <div className="pt-2 border-t border-gray-700">
+            <h5 className="text-sm text-gray-300 mb-2">Interviewer</h5>
+            {sessionState?.interviewer ? (
+              <div className="text-sm text-gray-200">
+                <p className="font-medium">{sessionState.interviewer.name}</p>
+                <p className="text-gray-400">
+                  {sessionState.interviewer.connected
+                    ? "Connected"
+                    : "Disconnected"}
+                </p>
+              </div>
+            ) : (
+              <div className="text-sm text-gray-500">
+                No interviewer in session
+              </div>
+            )}
+          </div>
 
-        <button onClick={toggleMic} style={{ marginLeft: 12 }}>
-          {micOn ? "Mute Mic" : "Unmute Mic"}
-        </button>
-      </div>
+          <div className="pt-2 border-t border-gray-700">
+            <h5 className="text-sm text-gray-300 mb-2">Candidate</h5>
+            {sessionState?.candidate ? (
+              <div className="text-sm text-gray-200">
+                <p className="font-medium">{sessionState.candidate.name}</p>
+                <p className="text-gray-400">
+                  {sessionState.candidate.connected
+                    ? "Connected"
+                    : "Disconnected"}
+                </p>
+                <p className="text-gray-400">
+                  Streaming: {sessionState.candidate.streaming ? "Yes" : "No"}
+                </p>
+                {/* <p className="text-gray-400">
+                  Screen: {sessionState.candidate.screenSharing ? "Yes" : "No"}
+                </p> */}
+              </div>
+            ) : (
+              <div className="text-sm text-gray-500">
+                No candidate in session
+              </div>
+            )}
+          </div>
 
-      <div style={{ marginTop: 10 }}>
-        <pre style={{ background: "#202022ff", padding: 8 }}>
-          {JSON.stringify(sessionState, null, 2)}
-        </pre>
-      </div>
+          <div className="pt-2 border-t border-gray-700">
+            <h5 className="text-sm text-gray-300 mb-2">Logs</h5>
+            <pre className="text-xs text-gray-300 bg-gray-900 p-2 rounded max-h-40 overflow-auto">
+              {JSON.stringify(sessionState, null, 2)}
+            </pre>
+          </div>
+        </div>
+      </aside>
     </div>
   );
+}
+
+function StatusPill({ status }) {
+  let color = "bg-gray-600 text-gray-100";
+  let label = status;
+  if (!status) {
+    label = "idle";
+  } else if (status.startsWith("error")) {
+    color = "bg-red-600 text-white";
+    label = status.replace("error:", "").trim();
+  } else if (status === "connected" || status === "streaming") {
+    color = "bg-green-600 text-white";
+    label = status;
+  } else if (
+    status === "connected_socket" ||
+    status === "answered" ||
+    status === "offer_sent"
+  ) {
+    color = "bg-indigo-600 text-white";
+  }
+
+  return <span className={`px-3 py-1 rounded ${color} text-sm`}>{label}</span>;
 }
