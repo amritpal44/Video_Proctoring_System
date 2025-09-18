@@ -1,6 +1,15 @@
-// frontend/src/components/CandidateRTC.jsx
 import React, { useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
+
+import CandidateScreenShare from "./CandidateScreenShare";
+
+
+/*
+  CandidateRTC
+  - preserves previous logic (createPeerAndSendOffer, startLocalStream, reconnection)
+  - adds: onended/onmute handlers, 2s hardware ping (candidate-health),
+          listens to interviewer audio-status -> show error if interviewer mic is off
+*/
 
 export default function CandidateRTC({
   backendUrl = "http://localhost:4000",
@@ -12,6 +21,7 @@ export default function CandidateRTC({
   const socketRef = useRef(null);
   const [status, setStatus] = useState("idle");
   const localStreamRef = useRef(null);
+  const pingIntervalRef = useRef(null);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -30,15 +40,16 @@ export default function CandidateRTC({
 
     socket.on("session_update", (s) => {
       console.log("session_update", s);
-      // If interviewer is connected and candidate is asked to send offer later,
-      // interviewer may emit 'request-offer' which we handle below
+      // If interviewer mic off, show error (we also listen for the explicit event below)
+      if (s && s.interviewer && s.interviewer.connected === false) {
+        // interviewer offline — this is informational
+      }
     });
 
+    // interviewer requested a fresh offer (re-negotiation)
     socket.on("request-offer", async () => {
       console.log("Received request-offer from interviewer");
-      // If we already have local stream and pc, create new offer (re-negotiation)
       if (!localStreamRef.current) {
-        // start camera first
         await startLocalStream();
       }
       await createPeerAndSendOffer();
@@ -60,6 +71,20 @@ export default function CandidateRTC({
       }
     });
 
+    // interviewer toggles mic => candidate should show error if interviewer mic is off
+    socket.on("interviewer-audio-status", ({ sessionId: sid, enabled }) => {
+      if (sid !== sessionId) return;
+      if (!enabled) {
+        // interviewer muted -> per your rule, candidate should see an error
+        setStatus("error: interviewer mic OFF");
+      } else {
+        // clear that specific error only if candidate stream is healthy
+        setStatus((s) =>
+          s.startsWith("error: interviewer") ? "streaming" : s
+        );
+      }
+    });
+
     socket.on("signal_error", (err) => {
       console.warn("signal_error", err);
       setStatus("error:" + (err.msg || "unknown"));
@@ -69,6 +94,7 @@ export default function CandidateRTC({
       socket.disconnect();
       stopLocalStream();
       cleanupPeer();
+      if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
@@ -88,13 +114,88 @@ export default function CandidateRTC({
       localVideoRef.current.srcObject = stream;
       localVideoRef.current.muted = true;
       await localVideoRef.current.play();
-      // inform server that candidate started streaming
+
+      // inform server that candidate started streaming (preserve existing event)
       socketRef.current.emit("stream-started", { sessionId });
       setStatus("streaming");
+
+      // monitor track lifecycle & permission loss
+      addTrackListeners(stream);
+
+      // start health ping
+      startHealthPing();
     } catch (e) {
       console.error("startLocalStream failed", e);
       setStatus("error_stream");
+      // inform server immediately that candidate can't stream
+      socketRef.current.emit("stream-stopped", { sessionId });
     }
+  }
+
+  function addTrackListeners(stream) {
+    // video track listeners
+    const videoTracks = stream.getVideoTracks();
+    const audioTracks = stream.getAudioTracks();
+
+    videoTracks.forEach((track) => {
+      track.onended = () => handleMediaStopped("video");
+      track.onmute = () => handleMediaStopped("video");
+      track.onunmute = () => {
+        // maybe resumed; re-evaluate status
+        setStatus("streaming");
+        socketRef.current.emit("candidate-health", {
+          sessionId,
+          healthy: true,
+        });
+      };
+    });
+
+    audioTracks.forEach((track) => {
+      track.onended = () => handleMediaStopped("audio");
+      track.onmute = () => handleMediaStopped("audio");
+      track.onunmute = () => {
+        setStatus("streaming");
+        socketRef.current.emit("candidate-health", {
+          sessionId,
+          healthy: true,
+        });
+      };
+    });
+  }
+
+  function handleMediaStopped(kind) {
+    console.warn("media stopped:", kind);
+    // stop local stream & notify server
+    stopLocalStream();
+    setStatus(`error: ${kind} stopped or permission removed`);
+    socketRef.current.emit("stream-stopped", { sessionId });
+    socketRef.current.emit("candidate-health", { sessionId, healthy: false });
+  }
+
+  function startHealthPing() {
+    if (pingIntervalRef.current) clearInterval(pingIntervalRef.current);
+    pingIntervalRef.current = setInterval(() => {
+      const s = localStreamRef.current;
+      const videoTrack = s?.getVideoTracks()?.[0];
+      const audioTrack = s?.getAudioTracks()?.[0];
+
+      const videoLive =
+        !!videoTrack &&
+        videoTrack.readyState === "live" &&
+        videoTrack.enabled !== false;
+      const audioLive =
+        !!audioTrack &&
+        audioTrack.readyState === "live" &&
+        audioTrack.enabled !== false;
+      const healthy = videoLive && audioLive;
+
+      socketRef.current.emit("candidate-health", { sessionId, healthy });
+
+      if (!healthy) {
+        // if something is wrong, handle immediately
+        handleMediaStopped("camera/mic");
+      }
+    }, 2000);
   }
 
   async function createPeerAndSendOffer() {
@@ -116,7 +217,7 @@ export default function CandidateRTC({
     });
     pcRef.current = pc;
 
-    // add tracks
+    // add tracks (audio + video)
     localStreamRef.current
       .getTracks()
       .forEach((track) => pc.addTrack(track, localStreamRef.current));
@@ -126,7 +227,6 @@ export default function CandidateRTC({
       pc.getSenders().forEach((sender) => {
         const params = sender.getParameters();
         if (!params.encodings) params.encodings = [{}];
-        // set a higher maxBitrate (2.5 Mbps)
         params.encodings = params.encodings.map((e) => ({
           ...e,
           maxBitrate: 2500000,
@@ -161,7 +261,7 @@ export default function CandidateRTC({
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
 
-    // send offer
+    // send offer (preserve event name)
     socketRef.current.emit("webrtc-offer", {
       sessionId,
       sdp: pc.localDescription,
@@ -184,6 +284,7 @@ export default function CandidateRTC({
     // inform server that candidate stopped streaming
     if (socketRef.current && socketRef.current.connected) {
       socketRef.current.emit("stream-stopped", { sessionId });
+      socketRef.current.emit("candidate-health", { sessionId, healthy: false });
     }
     setStatus("stopped_stream");
   }
@@ -208,9 +309,12 @@ export default function CandidateRTC({
       />
       <div style={{ marginTop: 8 }}>
         <button onClick={startAndShare}>Start & Share Camera</button>
-        {/* <button onClick={stopLocalStream} style={{ marginLeft: 8 }}>
-          Stop Sharing
-        </button> */}
+        <CandidateScreenShare
+          pcRef={pcRef}
+          socketRef={socketRef}
+          sessionId={sessionId}
+        />
+        {/* preserve your commented-out stop button — candidate should NOT have explicit off per requirement */}
         <span style={{ marginLeft: 12 }}>{status}</span>
       </div>
     </div>

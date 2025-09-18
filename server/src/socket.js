@@ -32,6 +32,19 @@ export function registerSocketHandlers(io) {
         return;
       }
 
+      // Check if someone with the same role is already connected
+      if (role === "interviewer" && session.interviewer?.connected) {
+        socket.emit("signal_error", {
+          msg: "An interviewer is already in this session",
+        });
+        return;
+      } else if (role === "candidate" && session.candidate?.connected) {
+        socket.emit("signal_error", {
+          msg: "A candidate is already in this session",
+        });
+        return;
+      }
+
       // join socket.io room
       socket.join(sessionId);
 
@@ -164,6 +177,34 @@ export function registerSocketHandlers(io) {
             lastUpdate: s.lastUpdate,
           });
         }
+      }
+    });
+
+    // candidate health ping
+    socket.on("candidate-health", ({ sessionId, healthy }) => {
+      const s = sessions[sessionId];
+      if (!s) return;
+      if (s.candidate) {
+        s.candidate.streaming = healthy; // keep streaming flag in sync
+        s.lastUpdate = new Date().toISOString();
+        // Optionally store lastHealth timestamp
+        s.candidate.lastHealth = { healthy, ts: s.lastUpdate };
+        // broadcast state
+        broadcastSession(io, sessionId);
+        // io.to(sessionId).emit("session_update", {
+        //   sessionId,
+        //   interviewer: s.interviewer
+        //     ? { name: s.interviewer.name, connected: !!s.interviewer.connected }
+        //     : null,
+        //   candidate: s.candidate
+        //     ? {
+        //         name: s.candidate.name,
+        //         connected: !!s.candidate.connected,
+        //         streaming: !!s.candidate.streaming,
+        //       }
+        //     : null,
+        //   lastUpdate: s.lastUpdate,
+        // });
       }
     });
   });

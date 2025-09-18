@@ -1,6 +1,14 @@
-// frontend/src/components/InterviewerRTC.jsx
 import React, { useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
+
+/*
+ InterviewerRTC
+ - preserves previous logic (handleOffer, create peer & answer)
+ - adds: getUserMedia(audio only) for interviewer mic
+ - interviewer can toggle mic on/off (sends interviewer-audio-status)
+ - when handling offer, add local audio track (if interviewer allowed mic)
+ - when interviewer toggles mic, emit event so candidate gets notified
+*/
 
 export default function InterviewerRTC({
   backendUrl = "http://localhost:4000",
@@ -12,6 +20,12 @@ export default function InterviewerRTC({
   const socketRef = useRef(null);
   const [status, setStatus] = useState("idle");
   const [sessionState, setSessionState] = useState(null);
+  const [micOn, setMicOn] = useState(true);
+  const localAudioStreamRef = useRef(null);
+  
+  const remoteScreenRef = useRef(null);
+  const [isVideoMain, setIsVideoMain] = useState(true);
+  const [screenActive, setScreenActive] = useState(false);
 
   useEffect(() => {
     if (!sessionId) return;
@@ -47,6 +61,12 @@ export default function InterviewerRTC({
       }
     });
 
+    socket.on("candidate-health", ({ sessionId: sid, healthy }) => {
+      if (sid !== sessionId) return;
+      // show candidate health status in UI
+      setSessionState((prev) => ({ ...prev, candidateHealth: healthy }));
+    });
+
     socket.on("signal_error", (err) => {
       console.warn("signal_error", err);
       setStatus("error:" + (err.msg || "unknown"));
@@ -56,14 +76,18 @@ export default function InterviewerRTC({
       socket.disconnect();
       cleanupPeer();
       if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
+      // stop interviewer mic
+      if (localAudioStreamRef.current) {
+        localAudioStreamRef.current.getTracks().forEach((t) => t.stop());
+        localAudioStreamRef.current = null;
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
 
   function handleSessionUpdate(s) {
-    // If candidate is connected but not streaming, and interviewer is connected -> ask candidate to send offer
+    // If candidate is connected but not streaming, ask candidate to send offer
     if (s && s.candidate && s.candidate.connected && !s.candidate.streaming) {
-      // Ask candidate to re-offer (useful after interviewer refresh)
       console.log("Candidate connected but not streaming -> requesting offer");
       socketRef.current.emit("request-offer", { sessionId });
     }
@@ -77,12 +101,61 @@ export default function InterviewerRTC({
     }
   }
 
+  async function ensureLocalAudio() {
+    if (localAudioStreamRef.current) {
+      // already captured; just ensure track.enabled matches micOn
+      localAudioStreamRef.current
+        .getAudioTracks()
+        .forEach((t) => (t.enabled = micOn));
+      return;
+    }
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      localAudioStreamRef.current = stream;
+      // ensure enabled/disabled based on micOn
+      localAudioStreamRef.current
+        .getAudioTracks()
+        .forEach((t) => (t.enabled = micOn));
+    } catch (e) {
+      console.warn("Interviewer mic access failed", e);
+      setStatus("mic_access_error");
+    }
+  }
+
+  // interviewer toggles mic on/off
+  async function toggleMic() {
+    const newState = !micOn;
+    setMicOn(newState);
+    // ensure we have a local audio stream
+    await ensureLocalAudio();
+    if (localAudioStreamRef.current) {
+      localAudioStreamRef.current
+        .getAudioTracks()
+        .forEach((t) => (t.enabled = newState));
+    }
+    // notify candidate about interviewer mic status
+    if (socketRef.current && socketRef.current.connected) {
+      socketRef.current.emit("interviewer-audio-status", {
+        sessionId,
+        enabled: newState,
+      });
+    }
+  }
+
   async function handleOffer(remoteSdp) {
     if (!pcRef.current) {
       const pc = new RTCPeerConnection({
         iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
       });
       pcRef.current = pc;
+
+      // if interviewer wants to send audio, ensure local audio captured and add tracks now
+      await ensureLocalAudio();
+      if (localAudioStreamRef.current) {
+        localAudioStreamRef.current.getAudioTracks().forEach((track) => {
+          pc.addTrack(track, localAudioStreamRef.current);
+        });
+      }
 
       pc.ontrack = (e) => {
         try {
@@ -151,7 +224,6 @@ export default function InterviewerRTC({
         <span style={{ marginRight: 12 }}>Status: {status}</span>
         <button
           onClick={() => {
-            // manual re-request in case of stale state
             if (socketRef.current && socketRef.current.connected)
               socketRef.current.emit("request-offer", { sessionId });
           }}
@@ -160,7 +232,6 @@ export default function InterviewerRTC({
         </button>
         <button
           onClick={() => {
-            // force cleanup
             cleanupPeer();
             setStatus("cleaned");
           }}
@@ -168,10 +239,14 @@ export default function InterviewerRTC({
         >
           Reset Connection
         </button>
+
+        <button onClick={toggleMic} style={{ marginLeft: 12 }}>
+          {micOn ? "Mute Mic" : "Unmute Mic"}
+        </button>
       </div>
 
       <div style={{ marginTop: 10 }}>
-        <pre style={{ background: "#f3f3f3", padding: 8 }}>
+        <pre style={{ background: "#202022ff", padding: 8 }}>
           {JSON.stringify(sessionState, null, 2)}
         </pre>
       </div>
