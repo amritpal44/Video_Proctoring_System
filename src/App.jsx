@@ -5,7 +5,7 @@ import InterviewerRTC from "./components/InterviewerRTC";
 import CandidateRTC from "./components/CandidateRTC";
 
 function App() {
-  const sessionId = "5NKP6VGeXmml";
+  const sessionId = "EEodO7RlkW9M";
   return (
     <BrowserRouter>
       <div>

@@ -15,6 +15,7 @@ function broadcastSession(io, sessionId) {
           name: s.candidate.name,
           connected: !!s.candidate.connected,
           streaming: !!s.candidate.streaming,
+          screenSharing: !!s.candidate.screenSharing,
         }
       : null,
     lastUpdate: s.lastUpdate,
@@ -152,6 +153,7 @@ export function registerSocketHandlers(io) {
           s.candidate.connected = false;
           // keep streaming=false to indicate stream stopped on disconnect
           s.candidate.streaming = false;
+          s.candidate.screenSharing = false; // reset screen sharing state on disconnect
           s.candidate.socketId = null;
           changed = true;
           console.log(`[session:${sid}] candidate disconnected`);
@@ -181,6 +183,28 @@ export function registerSocketHandlers(io) {
     });
 
     // candidate health ping
+    socket.on("candidate_screen_start", ({ sessionId }) => {
+      const s = sessions[sessionId];
+      if (!s) return;
+      if (s.candidate && s.candidate.socketId === socket.id) {
+        s.candidate.screenSharing = true;
+        s.lastUpdate = new Date().toISOString();
+        broadcastSession(io, sessionId);
+        console.log(`[session:${sessionId}] candidate started screen sharing`);
+      }
+    });
+
+    socket.on("candidate_screen_stop", ({ sessionId }) => {
+      const s = sessions[sessionId];
+      if (!s) return;
+      if (s.candidate && s.candidate.socketId === socket.id) {
+        s.candidate.screenSharing = false;
+        s.lastUpdate = new Date().toISOString();
+        broadcastSession(io, sessionId);
+        console.log(`[session:${sessionId}] candidate stopped screen sharing`);
+      }
+    });
+
     socket.on("candidate-health", ({ sessionId, healthy }) => {
       const s = sessions[sessionId];
       if (!s) return;
@@ -207,5 +231,18 @@ export function registerSocketHandlers(io) {
         // });
       }
     });
+
+    // socket.on("candidate_screen_start", ({ sessionId }) => {
+    //   const s = sessions[sessionId];
+    //   if (s && s.candidate) s.candidate.screen = true;
+    //   io.to(sessionId).emit("session_update", s);
+    // });
+
+    // socket.on("candidate_screen_stop", ({ sessionId }) => {
+    //   const s = sessions[sessionId];
+    //   if (s && s.candidate) s.candidate.screen = false;
+    //   io.to(sessionId).emit("candidate_screen_stop");
+    //   io.to(sessionId).emit("session_update", s);
+    // });
   });
 }

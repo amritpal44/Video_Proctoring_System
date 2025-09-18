@@ -22,7 +22,7 @@ export default function InterviewerRTC({
   const [sessionState, setSessionState] = useState(null);
   const [micOn, setMicOn] = useState(true);
   const localAudioStreamRef = useRef(null);
-  
+
   const remoteScreenRef = useRef(null);
   const [isVideoMain, setIsVideoMain] = useState(true);
   const [screenActive, setScreenActive] = useState(false);
@@ -72,6 +72,18 @@ export default function InterviewerRTC({
       setStatus("error:" + (err.msg || "unknown"));
     });
 
+    socket.on("candidate_screen_stop", ({ sessionId: sid }) => {
+      if (sid !== sessionId) return;
+      if (remoteScreenRef.current) {
+        const stream = remoteScreenRef.current.srcObject;
+        if (stream) {
+          stream.getTracks().forEach((track) => track.stop());
+          remoteScreenRef.current.srcObject = null;
+        }
+        setScreenActive(false);
+      }
+    });
+
     return () => {
       socket.disconnect();
       cleanupPeer();
@@ -86,6 +98,20 @@ export default function InterviewerRTC({
   }, [sessionId]);
 
   function handleSessionUpdate(s) {
+    // Update screen sharing state based on session
+    if (s && s.candidate) {
+      if (s.candidate.screenSharing && !screenActive) {
+        setScreenActive(true);
+        // Request a new offer to get the screen share track
+        socketRef.current.emit("request-offer", { sessionId });
+      } else if (!s.candidate.screenSharing && screenActive) {
+        setScreenActive(false);
+        if (remoteScreenRef.current) {
+          remoteScreenRef.current.srcObject = null;
+        }
+      }
+    }
+
     // If candidate is connected but not streaming, ask candidate to send offer
     if (s && s.candidate && s.candidate.connected && !s.candidate.streaming) {
       console.log("Candidate connected but not streaming -> requesting offer");
@@ -98,6 +124,8 @@ export default function InterviewerRTC({
       setStatus("candidate_offline");
       cleanupPeer();
       if (remoteVideoRef.current) remoteVideoRef.current.srcObject = null;
+      if (remoteScreenRef.current) remoteScreenRef.current.srcObject = null;
+      setScreenActive(false);
     }
   }
 
@@ -158,12 +186,36 @@ export default function InterviewerRTC({
       }
 
       pc.ontrack = (e) => {
-        try {
-          remoteVideoRef.current.srcObject = e.streams[0];
+        const track = e.track;
+        const stream = e.streams[0];
+
+        console.log("ontrack:", track.kind, track.label);
+
+        if (
+          track.kind === "video" &&
+          track.label.toLowerCase().includes("screen")
+        ) {
+          // This is candidate's shared screen
+          if (!remoteScreenRef.current.srcObject) {
+            remoteScreenRef.current.srcObject = new MediaStream();
+          }
+          remoteScreenRef.current.srcObject.addTrack(track);
+          remoteScreenRef.current.play().catch(() => {});
+          setScreenActive(true);
+        } else if (track.kind === "video") {
+          // This is candidate's webcam video
+          if (!remoteVideoRef.current.srcObject) {
+            remoteVideoRef.current.srcObject = new MediaStream();
+          }
+          remoteVideoRef.current.srcObject.addTrack(track);
           remoteVideoRef.current.play().catch(() => {});
           setStatus("streaming");
-        } catch (err) {
-          console.warn("ontrack error", err);
+        } else if (track.kind === "audio") {
+          // Audio tracks just get added to the main remote video
+          if (!remoteVideoRef.current.srcObject) {
+            remoteVideoRef.current.srcObject = new MediaStream();
+          }
+          remoteVideoRef.current.srcObject.addTrack(track);
         }
       };
 
@@ -209,17 +261,105 @@ export default function InterviewerRTC({
       } catch {}
       pcRef.current = null;
     }
+    // Clean up video streams
+    if (remoteVideoRef.current && remoteVideoRef.current.srcObject) {
+      remoteVideoRef.current.srcObject
+        .getTracks()
+        .forEach((track) => track.stop());
+      remoteVideoRef.current.srcObject = null;
+    }
+    if (remoteScreenRef.current && remoteScreenRef.current.srcObject) {
+      remoteScreenRef.current.srcObject
+        .getTracks()
+        .forEach((track) => track.stop());
+      remoteScreenRef.current.srcObject = null;
+    }
+    setScreenActive(false);
   }
 
   return (
     <div>
       <h3>Interviewer (session: {sessionId})</h3>
-      <video
+      {/* <video
         ref={remoteVideoRef}
         autoPlay
         playsInline
-        style={{ width: 640, borderRadius: 6, background: "#000" }}
+        style={{ width: "50%", borderRadius: 6, background: "#000" }}
       />
+      <video
+        ref={remoteScreenRef}
+        autoPlay
+        playsInline
+        style={{
+          width: "50%",
+          borderRadius: 6,
+          background: "#000",
+          display: screenActive ? "block" : "none",
+        }}
+      /> */}
+
+      <div
+        style={{
+          display: "flex",
+          gap: "16px",
+          maxWidth: "100%",
+          height: "auto",
+        }}
+      >
+        <div
+          style={{
+            width: isVideoMain ? "70%" : "30%",
+            minWidth: "300px",
+            maxWidth: screenActive ? "70%" : "100%",
+          }}
+        >
+          <video
+            ref={remoteVideoRef}
+            autoPlay
+            playsInline
+            style={{
+              width: "100%",
+              height: "auto",
+              maxHeight: "70vh",
+              borderRadius: 6,
+              background: "#000",
+              objectFit: "contain",
+            }}
+          />
+        </div>
+        {screenActive && (
+          <div
+            style={{
+              width: isVideoMain ? "30%" : "70%",
+              minWidth: "300px",
+            }}
+          >
+            <video
+              ref={remoteScreenRef}
+              autoPlay
+              playsInline
+              style={{
+                width: "100%",
+                height: "auto",
+                maxHeight: "70vh",
+                borderRadius: 6,
+                background: "#000",
+                objectFit: "contain",
+              }}
+            />
+          </div>
+        )}
+      </div>
+
+      {screenActive && (
+        <button
+          onClick={() => setIsVideoMain(!isVideoMain)}
+          style={{ marginTop: 8 }}
+        >
+          Swap Focus
+        </button>
+      )}
+
       <div style={{ marginTop: 8 }}>
         <span style={{ marginRight: 12 }}>Status: {status}</span>
         <button
