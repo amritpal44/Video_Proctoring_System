@@ -299,23 +299,32 @@ export default function CandidateRTC({
   }
 
   return (
-    <div>
-      <h3>Candidate (session: {sessionId})</h3>
-      <video
-        ref={localVideoRef}
-        autoPlay
-        playsInline
-        style={{ width: 480, borderRadius: 6, background: "#000" }}
-      />
-      <div style={{ marginTop: 8 }}>
-        {/* <button onClick={startAndShare}>Start & Share Camera</button>
-        <CandidateScreenShare
-          pcRef={pcRef}
-          socketRef={socketRef}
-          sessionId={sessionId}
-        /> */}
-        {/* preserve your commented-out stop button — candidate should NOT have explicit off per requirement */}
-        <span style={{ marginLeft: 12 }}>{status}</span>
+    <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-gray-900 via-gray-950 to-gray-900 py-8 px-2">
+      <div className="w-full max-w-2xl bg-gray-800/90 rounded-2xl shadow-2xl p-8 border border-gray-700 flex flex-col items-center">
+        <h3 className="text-2xl font-bold text-white mb-6">
+          Candidate{" "}
+          <span className="text-base font-mono text-indigo-300">
+            (session: {sessionId})
+          </span>
+        </h3>
+        <video
+          ref={localVideoRef}
+          autoPlay
+          playsInline
+          className="w-full max-w-lg aspect-video rounded-xl bg-black border border-gray-700 shadow mb-6"
+        />
+        <div className="w-full flex flex-col items-center">
+          {/* <button onClick={startAndShare}>Start & Share Camera</button>
+          <CandidateScreenShare
+            pcRef={pcRef}
+            socketRef={socketRef}
+            sessionId={sessionId}
+          /> */}
+          {/* preserve your commented-out stop button — candidate should NOT have explicit off per requirement */}
+          <span className="mt-2 text-base text-gray-300 font-semibold">
+            {status}
+          </span>
+        </div>
       </div>
     </div>
   );

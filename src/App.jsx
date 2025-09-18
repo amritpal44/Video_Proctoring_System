@@ -14,9 +14,9 @@ function App() {
   return (
     <AuthProvider>
       <BrowserRouter>
-        <div className="min-h-screen bg-gray-900 text-gray-100">
+        <div className="bg-gray-900 text-gray-100 w-screen h-screen overflow-hidden">
           <Navbar />
-          <main className="max-w-6xl mx-auto p-6">
+          <main className="w-full h-[calc(100%-64.5px)] mx-auto">
             <Routes>
               <Route path="/login" element={<LoginPage />} />
               <Route path="/signup" element={<SignupPage />} />
@@ -38,9 +38,9 @@ function ProtectedInterviewer() {
   const { user, sessionId } = useContext(AuthContext);
   if (!user) {
     return (
-      <div className="p-6 bg-gray-800 rounded text-gray-300">
-        <h3 className="text-lg font-medium">Access required</h3>
-        <p className="text-sm text-gray-400">
+      <div className="p-6 bg-gray-800 rounded text-gray-300 h-full">
+        <h3 className="text-3xl font-bold">Access required</h3>
+        <p className="text-xl text-gray-400">
           Please login as an interviewer to access this page.
         </p>
       </div>
@@ -48,9 +48,9 @@ function ProtectedInterviewer() {
   }
   if (user.role !== "interviewer" && user.role !== "admin") {
     return (
-      <div className="p-6 bg-gray-800 rounded text-gray-300">
-        <h3 className="text-lg font-medium">Insufficient permissions</h3>
-        <p className="text-sm text-gray-400">
+      <div className="p-6 bg-gray-800 rounded text-gray-300 h-full">
+        <h3 className="text-3xl font-bold">Insufficient permissions</h3>
+        <p className="text-xl text-gray-400">
           Your account does not have permission to use the interviewer console.
         </p>
       </div>
@@ -58,9 +58,9 @@ function ProtectedInterviewer() {
   }
   if (!sessionId) {
     return (
-      <div className="p-6 bg-gray-800 rounded text-gray-300">
-        <h3 className="text-lg font-medium">Session ID unknown</h3>
-        <p className="text-sm text-gray-400">
+      <div className="p-6 bg-gray-800 rounded text-gray-300 h-full">
+        <h3 className="text-3xl font-bold">Session ID unknown</h3>
+        <p className="text-xl text-gray-400">
           Please create a session on the home page and save the Session ID, or
           paste it into the Session ID field.
         </p>
@@ -73,7 +73,7 @@ function ProtectedInterviewer() {
     );
   }
   return (
-    <div className="p-2 bg-gray-800 rounded">
+    <div className="bg-gray-800 rounded h-full">
       <InterviewerRTC
         backendUrl="http://localhost:4000"
         sessionId={sessionId}
@@ -87,7 +87,7 @@ function CandidateWrapper() {
   const { sessionId } = useContext(AuthContext);
   if (!sessionId) {
     return (
-      <div className="p-6 bg-gray-800 rounded text-gray-300">
+      <div className="p-6 bg-gray-800 h-full rounded text-gray-300">
         <h3 className="text-lg font-medium">Session ID unknown</h3>
         <p className="text-sm text-gray-400">
           Paste the session ID shared by your interviewer on the home page and
@@ -102,7 +102,7 @@ function CandidateWrapper() {
     );
   }
   return (
-    <div className="p-6 bg-gray-800 rounded">
+    <div className="bg-gray-800 rounded h-full">
       <CandidateRTC
         backendUrl="http://localhost:4000"
         sessionId={sessionId}

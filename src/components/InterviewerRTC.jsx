@@ -279,9 +279,9 @@ export default function InterviewerRTC({
   }
 
   return (
-    <div className="grid grid-cols-12 gap-6">
-      <div className="col-span-8">
-        <div className="bg-black rounded-lg overflow-hidden">
+    <div className="w-full h-full flex flex-col md:flex-row items-stretch justify-center bg-gradient-to-br from-gray-900 via-gray-950 to-gray-900 p-4 md:p-8 gap-8">
+      <main className="flex-1 flex flex-col items-center justify-center max-w-3xl mx-auto">
+        <div className="w-full bg-black rounded-2xl overflow-hidden shadow-2xl border border-gray-800">
           <video
             ref={remoteVideoRef}
             autoPlay
@@ -289,20 +289,10 @@ export default function InterviewerRTC({
             className="w-full h-[60vh] object-contain bg-black"
           />
         </div>
-        {/* {screenActive && (
-          <div className="mt-4 bg-black rounded-lg overflow-hidden">
-            <video
-              ref={remoteScreenRef}
-              autoPlay
-              playsInline
-              className="w-full h-[40vh] object-contain bg-black"
-            />
-          </div>
-        )} */}
-        <div className="flex items-center gap-3 mt-4">
+        <div className="flex flex-wrap items-center gap-4 mt-6 w-full justify-center">
           <button
             onClick={() => setIsVideoMain(!isVideoMain)}
-            className="px-3 py-1 bg-gray-700 rounded text-gray-100"
+            className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-gray-100 font-medium shadow"
           >
             Swap Focus
           </button>
@@ -311,7 +301,7 @@ export default function InterviewerRTC({
               if (socketRef.current && socketRef.current.connected)
                 socketRef.current.emit("request-offer", { sessionId });
             }}
-            className="px-3 py-1 bg-indigo-600 rounded text-white"
+            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-white font-semibold shadow"
           >
             Request Offer
           </button>
@@ -320,26 +310,28 @@ export default function InterviewerRTC({
               cleanupPeer();
               setStatus("cleaned");
             }}
-            className="px-3 py-1 bg-gray-700 rounded text-gray-100"
+            className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-gray-100 font-medium shadow"
           >
             Reset
           </button>
           <button
             onClick={toggleMic}
-            className="px-3 py-1 bg-gray-700 rounded text-gray-100"
+            className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-gray-100 font-medium shadow"
           >
             {micOn ? "Mute Mic" : "Unmute Mic"}
           </button>
         </div>
-        <div className="mt-3">
+        <div className="mt-5">
           <StatusPill status={status} />
         </div>
-      </div>
+      </main>
 
-      <aside className="col-span-4">
-        <div className="bg-gray-800 rounded-lg p-4 space-y-4">
-          <h4 className="text-lg font-semibold">Session Details</h4>
-          <div className="text-sm text-gray-300">
+      <aside className="w-full md:w-[400px] bg-gray-800/90 rounded-2xl shadow-2xl p-8 border border-gray-700 flex flex-col gap-6 mx-auto">
+        <div>
+          <h4 className="text-2xl font-bold text-white mb-4 tracking-tight">
+            Session Details
+          </h4>
+          <div className="text-base text-gray-300 space-y-1">
             <p>
               <span className="text-gray-400">Session ID:</span>{" "}
               <span className="font-mono text-indigo-300">{sessionId}</span>
@@ -357,55 +349,56 @@ export default function InterviewerRTC({
                 : "—"}
             </p>
           </div>
+        </div>
 
-          <div className="pt-2 border-t border-gray-700">
-            <h5 className="text-sm text-gray-300 mb-2">Interviewer</h5>
-            {sessionState?.interviewer ? (
-              <div className="text-sm text-gray-200">
-                <p className="font-medium">{sessionState.interviewer.name}</p>
-                <p className="text-gray-400">
-                  {sessionState.interviewer.connected
-                    ? "Connected"
-                    : "Disconnected"}
-                </p>
-              </div>
-            ) : (
-              <div className="text-sm text-gray-500">
-                No interviewer in session
-              </div>
-            )}
-          </div>
+        <div className="pt-2 border-t border-gray-700">
+          <h5 className="text-lg text-gray-300 mb-2 font-semibold">
+            Interviewer
+          </h5>
+          {sessionState?.interviewer ? (
+            <div className="text-base text-gray-200">
+              <p className="font-medium">{sessionState.interviewer.name}</p>
+              <p className="text-gray-400">
+                {sessionState.interviewer.connected
+                  ? "Connected"
+                  : "Disconnected"}
+              </p>
+            </div>
+          ) : (
+            <div className="text-base text-gray-500">
+              No interviewer in session
+            </div>
+          )}
+        </div>
 
-          <div className="pt-2 border-t border-gray-700">
-            <h5 className="text-sm text-gray-300 mb-2">Candidate</h5>
-            {sessionState?.candidate ? (
-              <div className="text-sm text-gray-200">
-                <p className="font-medium">{sessionState.candidate.name}</p>
-                <p className="text-gray-400">
-                  {sessionState.candidate.connected
-                    ? "Connected"
-                    : "Disconnected"}
-                </p>
-                <p className="text-gray-400">
-                  Streaming: {sessionState.candidate.streaming ? "Yes" : "No"}
-                </p>
-                {/* <p className="text-gray-400">
-                  Screen: {sessionState.candidate.screenSharing ? "Yes" : "No"}
-                </p> */}
-              </div>
-            ) : (
-              <div className="text-sm text-gray-500">
-                No candidate in session
-              </div>
-            )}
-          </div>
+        <div className="pt-2 border-t border-gray-700">
+          <h5 className="text-lg text-gray-300 mb-2 font-semibold">
+            Candidate
+          </h5>
+          {sessionState?.candidate ? (
+            <div className="text-base text-gray-200">
+              <p className="font-medium">{sessionState.candidate.name}</p>
+              <p className="text-gray-400">
+                {sessionState.candidate.connected
+                  ? "Connected"
+                  : "Disconnected"}
+              </p>
+              <p className="text-gray-400">
+                Streaming: {sessionState.candidate.streaming ? "Yes" : "No"}
+              </p>
+            </div>
+          ) : (
+            <div className="text-base text-gray-500">
+              No candidate in session
+            </div>
+          )}
+        </div>
 
-          <div className="pt-2 border-t border-gray-700">
-            <h5 className="text-sm text-gray-300 mb-2">Logs</h5>
-            <pre className="text-xs text-gray-300 bg-gray-900 p-2 rounded max-h-40 overflow-auto">
-              {JSON.stringify(sessionState, null, 2)}
-            </pre>
-          </div>
+        <div className="pt-4 border-t border-gray-700">
+          <h5 className="text-base text-gray-300 mb-2 font-semibold">Logs</h5>
+          <pre className="text-xs text-gray-300 bg-gray-900/80 p-3 rounded-lg max-h-40 overflow-auto border border-gray-700">
+            {JSON.stringify(sessionState, null, 2)}
+          </pre>
         </div>
       </aside>
     </div>

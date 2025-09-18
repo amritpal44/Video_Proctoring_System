@@ -56,12 +56,12 @@ export default function LandingPage() {
   };
 
   return (
-    <div className="max-w-3xl mx-auto mt-12">
-      <div className="bg-gray-800 rounded-lg p-6 shadow-md">
+    <div className="w-full h-full flex flex-col items-center justify-center bg-gradient-to-br from-gray-900 via-gray-950 to-gray-900 py-8 px-2">
+      <div className="w-full max-w-2xl bg-gray-800/90 rounded-2xl shadow-2xl p-12 border border-gray-700">
         <h1 className="text-2xl font-semibold text-white mb-2">
           Welcome to HireDude
         </h1>
-        <p className="text-gray-300 mb-4">
+        <p className="text-gray-300 mb-8">
           Create and manage interview sessions with live proctoring.
         </p>
 
