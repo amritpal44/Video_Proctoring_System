@@ -1,14 +1,19 @@
-import { generateSessionId } from "../utils/generateId.js";
+// server/src/controllers/sessionController.js
 import { sessions } from "../socket.js";
+import { generateSimpleId } from "../utils/generateId.js";
 
-// REST endpoint to create session (by interviewer)
+// create a session and ensure uniqueness
 export function createSession(req, res) {
   const { interviewerName } = req.body;
-  if (!interviewerName) {
-    return res.status(400).json({ error: "interviewerName is required" });
-  }
+  if (!interviewerName)
+    return res.status(400).json({ error: "interviewerName required" });
 
-  const sessionId = generateSessionId();
+  // generate unique id (regenerate if collision)
+  let sessionId;
+  do {
+    sessionId = generateSimpleId(12);
+  } while (sessions[sessionId]);
+
   sessions[sessionId] = {
     sessionId,
     interviewer: { name: interviewerName, socketId: null },

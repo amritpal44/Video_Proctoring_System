@@ -1,19 +1,9 @@
-import { sessions } from "../socket.js";
-
-export function generateSessionId() {
+// server/src/utils/generateId.js
+export function generateSimpleId(length = 12) {
   const chars =
     "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
-
-  let id;
-  do {
-    id = "";
-    for (let i = 0; i < 12; i++) {
-      id += chars.charAt(Math.floor(Math.random() * chars.length));
-    }
-  } while (sessions[id]); // ensure not already used
-
+  let id = "";
+  for (let i = 0; i < length; i++)
+    id += chars.charAt(Math.floor(Math.random() * chars.length));
   return id;
 }
-
-//PENDING
-//these are also needed to be unique
