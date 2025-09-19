@@ -94,9 +94,5 @@ app.get("/api/report/:candidateName/csv", async (req, res) => {
   }
 });
 
-app.get("/", (req, res) => {
-  res.send("Video Proctoring Server is running.");
-});
-
 const PORT = process.env.PORT || 4000;
 app.listen(PORT, () => console.log("Server listening on", PORT));

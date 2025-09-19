@@ -52,6 +52,14 @@ const io = new Server(server, {
 });
 registerSocketHandlers(io);
 
+
+app.get("/", (req, res) => {
+  return res.json({
+    success: true,
+    message: "Video Proctoring Server is up and running",
+  });
+});
+
 // server listen
 const PORT = process.env.PORT || 4000;
 server.listen(PORT, () => {
