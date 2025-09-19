@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from "react";
 import { io } from "socket.io-client";
+import ProctoringMonitor from "./ProctoringMonitor";
 
 /*
  InterviewerRTC
@@ -22,6 +23,7 @@ export default function InterviewerRTC({
   const [sessionState, setSessionState] = useState(null);
   const [micOn, setMicOn] = useState(true);
   const localAudioStreamRef = useRef(null);
+  const [proctoringEnabled, setProctoringEnabled] = useState(true);
 
   const remoteScreenRef = useRef(null);
   const [isVideoMain, setIsVideoMain] = useState(true);
@@ -281,21 +283,44 @@ export default function InterviewerRTC({
   return (
     <div className="w-full h-full flex flex-col md:flex-row items-stretch justify-center bg-gradient-to-br from-gray-900 via-gray-950 to-gray-900 p-4 md:p-8 gap-8">
       <main className="flex-1 flex flex-col items-center justify-center max-w-3xl mx-auto">
-        <div className="w-full bg-black rounded-2xl overflow-hidden shadow-2xl border border-gray-800">
+        <div className="relative w-full bg-black rounded-2xl overflow-hidden shadow-2xl border border-gray-800">
           <video
             ref={remoteVideoRef}
             autoPlay
             playsInline
             className="w-full h-[60vh] object-contain bg-black"
           />
+
+          {/* Proctoring Monitor Overlay */}
+          {proctoringEnabled && status === "streaming" && (
+            <ProctoringMonitor
+              videoRef={remoteVideoRef}
+              sessionId={sessionId}
+              sessionState={sessionState}
+              enabled={proctoringEnabled}
+            />
+          )}
         </div>
+
         <div className="flex flex-wrap items-center gap-4 mt-6 w-full justify-center">
+          <button
+            onClick={() => setProctoringEnabled(!proctoringEnabled)}
+            className={`px-4 py-2 rounded-lg font-medium shadow ${
+              proctoringEnabled
+                ? "bg-green-600 hover:bg-green-500 text-white"
+                : "bg-gray-700 hover:bg-gray-600 text-gray-100"
+            }`}
+          >
+            {proctoringEnabled ? "Proctoring ON" : "Proctoring OFF"}
+          </button>
+
           <button
             onClick={() => setIsVideoMain(!isVideoMain)}
             className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-gray-100 font-medium shadow"
           >
             Swap Focus
           </button>
+
           <button
             onClick={() => {
               if (socketRef.current && socketRef.current.connected)
@@ -305,6 +330,7 @@ export default function InterviewerRTC({
           >
             Request Offer
           </button>
+
           <button
             onClick={() => {
               cleanupPeer();
@@ -314,6 +340,7 @@ export default function InterviewerRTC({
           >
             Reset
           </button>
+
           <button
             onClick={toggleMic}
             className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-gray-100 font-medium shadow"
@@ -321,6 +348,7 @@ export default function InterviewerRTC({
             {micOn ? "Mute Mic" : "Unmute Mic"}
           </button>
         </div>
+
         <div className="mt-5">
           <StatusPill status={status} />
         </div>
@@ -386,6 +414,9 @@ export default function InterviewerRTC({
               <p className="text-gray-400">
                 Streaming: {sessionState.candidate.streaming ? "Yes" : "No"}
               </p>
+              <p className="text-gray-400">
+                Health: {sessionState.candidateHealth ? "Good" : "Issues"}
+              </p>
             </div>
           ) : (
             <div className="text-base text-gray-500">
@@ -394,12 +425,19 @@ export default function InterviewerRTC({
           )}
         </div>
 
-        <div className="pt-4 border-t border-gray-700">
-          <h5 className="text-base text-gray-300 mb-2 font-semibold">Logs</h5>
-          <pre className="text-xs text-gray-300 bg-gray-900/80 p-3 rounded-lg max-h-40 overflow-auto border border-gray-700">
-            {JSON.stringify(sessionState, null, 2)}
-          </pre>
-        </div>
+        {screenActive && (
+          <div className="pt-2 border-t border-gray-700">
+            <h5 className="text-lg text-gray-300 mb-2 font-semibold">
+              Screen Share
+            </h5>
+            <video
+              ref={remoteScreenRef}
+              autoPlay
+              playsInline
+              className="w-full aspect-video rounded-lg bg-black border border-gray-700"
+            />
+          </div>
+        )}
       </aside>
     </div>
   );

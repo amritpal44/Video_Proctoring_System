@@ -314,12 +314,12 @@ export default function CandidateRTC({
           className="w-full max-w-lg aspect-video rounded-xl bg-black border border-gray-700 shadow mb-6"
         />
         <div className="w-full flex flex-col items-center">
-          {/* <button onClick={startAndShare}>Start & Share Camera</button>
+          <button onClick={startAndShare}>Start & Share Camera</button>
           <CandidateScreenShare
             pcRef={pcRef}
             socketRef={socketRef}
             sessionId={sessionId}
-          /> */}
+          />
           {/* preserve your commented-out stop button — candidate should NOT have explicit off per requirement */}
           <span className="mt-2 text-base text-gray-300 font-semibold">
             {status}

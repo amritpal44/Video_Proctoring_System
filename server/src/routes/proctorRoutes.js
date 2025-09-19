@@ -1,8 +1,12 @@
+// server/src/routes/proctorRoutes.js
 import express from "express";
 import {
   createEvent,
+  createEventsBatch,
   listEvents,
   listInterviews,
+  getIntegrityScore,
+  generateReport,
 } from "../controllers/proctorController.js";
 import {
   authMiddleware,
@@ -13,11 +17,16 @@ import {
 const router = express.Router();
 router.use(authMiddleware);
 
-// events
-router.post("/events", requireAuth, createEvent);
+// Events endpoints
+router.post("/events", createEvent); // Allow both authenticated and unauthenticated for now
+router.post("/events/batch", createEventsBatch); // Batch endpoint for performance
 router.get("/events", requireAuth, listEvents);
 
-// admin/listing
-router.get("/interviews", requireRole("admin"), listInterviews);
+// Integrity score
+router.get("/score/:interviewId", requireAuth, getIntegrityScore);
+
+// Interviews and reporting
+router.get("/interviews", requireAuth, listInterviews); // Changed from requireRole('admin')
+router.get("/report/:interviewId", requireAuth, generateReport);
 
 export default router;
