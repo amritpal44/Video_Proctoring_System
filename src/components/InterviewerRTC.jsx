@@ -16,6 +16,8 @@ export default function InterviewerRTC({
   sessionId,
   name = "Interviewer",
 }) {
+  const [localSessionId, setLocalSessionId] = useState(sessionId || "");
+  const [editingTitle, setEditingTitle] = useState("");
   const remoteVideoRef = useRef(null);
   const pcRef = useRef(null);
   const socketRef = useRef(null);
@@ -99,6 +101,24 @@ export default function InterviewerRTC({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId]);
+
+  // keep local title in sync when sessionState loads
+  useEffect(() => {
+    if (sessionState && sessionState.interviewTitle) {
+      setEditingTitle(sessionState.interviewTitle);
+    } else if (sessionState && sessionState.interviewId) {
+      // try to fetch interview doc title from backend
+      (async () => {
+        try {
+          const res = await fetch(
+            `${backendUrl}/api/sessions/${sessionState.sessionId}`
+          );
+          const j = await res.json();
+          if (j && j.title) setEditingTitle(j.title);
+        } catch (e) {}
+      })();
+    }
+  }, [sessionState]);
 
   function handleSessionUpdate(s) {
     // Update screen sharing state based on session
@@ -283,6 +303,90 @@ export default function InterviewerRTC({
   return (
     <div className="w-full h-full flex flex-col md:flex-row items-stretch justify-center bg-gradient-to-br from-gray-900 via-gray-950 to-gray-900 p-4 md:p-8 gap-8">
       <main className="flex-1 flex flex-col items-center justify-center max-w-3xl mx-auto">
+        {/* Top controls: join session and edit title */}
+        <div className="w-full mb-4 flex items-center gap-3">
+          <input
+            value={localSessionId}
+            onChange={(e) => setLocalSessionId(e.target.value)}
+            placeholder="Paste session ID to join"
+            className="flex-1 px-3 py-2 rounded bg-gray-800 text-white border border-gray-700"
+          />
+          <button
+            onClick={() => {
+              if (!localSessionId) return alert("Enter session ID");
+              // emit join via socket
+              if (!socketRef.current) {
+                const s = io(backendUrl, {
+                  autoConnect: true,
+                  withCredentials: true,
+                });
+                socketRef.current = s;
+                s.on("connect", () => {
+                  s.emit("join_session", {
+                    sessionId: localSessionId,
+                    role: "interviewer",
+                    name,
+                  });
+                });
+                // basic session_update wiring
+                s.on("session_update", (s) => {
+                  setSessionState(s);
+                });
+              } else {
+                socketRef.current.emit("join_session", {
+                  sessionId: localSessionId,
+                  role: "interviewer",
+                  name,
+                });
+              }
+            }}
+            className="px-4 py-2 bg-indigo-600 text-white rounded"
+          >
+            Join
+          </button>
+
+          <input
+            value={editingTitle}
+            onChange={(e) => setEditingTitle(e.target.value)}
+            placeholder="Interview title"
+            className="ml-4 px-3 py-2 rounded bg-gray-800 text-white border border-gray-700 w-64"
+          />
+          <button
+            onClick={async () => {
+              // save title via backend API
+              const sid =
+                localSessionId ||
+                sessionId ||
+                (sessionState && sessionState.sessionId);
+              if (!sid) return alert("No session selected to save title");
+              try {
+                const res = await fetch(
+                  `${backendUrl}/api/sessions/${sid}/title`,
+                  {
+                    method: "POST",
+                    credentials: "include",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ title: editingTitle }),
+                  }
+                );
+                if (!res.ok) {
+                  const j = await res.json().catch(() => null);
+                  alert(
+                    "Failed to save title: " + (j?.error || res.statusText)
+                  );
+                } else {
+                  alert("Saved");
+                }
+              } catch (e) {
+                console.error(e);
+                alert("Failed to save title");
+              }
+            }}
+            className="px-3 py-2 bg-green-600 text-white rounded"
+          >
+            Save
+          </button>
+        </div>
         <div className="relative w-full bg-black rounded-2xl overflow-hidden shadow-2xl border border-gray-800">
           <video
             ref={remoteVideoRef}
@@ -303,7 +407,7 @@ export default function InterviewerRTC({
         </div>
 
         <div className="flex flex-wrap items-center gap-4 mt-6 w-full justify-center">
-          <button
+          {/* <button
             onClick={() => setProctoringEnabled(!proctoringEnabled)}
             className={`px-4 py-2 rounded-lg font-medium shadow ${
               proctoringEnabled
@@ -312,14 +416,14 @@ export default function InterviewerRTC({
             }`}
           >
             {proctoringEnabled ? "Proctoring ON" : "Proctoring OFF"}
-          </button>
+          </button> */}
 
-          <button
+          {/* <button
             onClick={() => setIsVideoMain(!isVideoMain)}
             className="px-4 py-2 bg-gray-700 hover:bg-gray-600 rounded-lg text-gray-100 font-medium shadow"
           >
             Swap Focus
-          </button>
+          </button> */}
 
           <button
             onClick={() => {
@@ -328,7 +432,7 @@ export default function InterviewerRTC({
             }}
             className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-white font-semibold shadow"
           >
-            Request Offer
+            Refresh Stream
           </button>
 
           <button

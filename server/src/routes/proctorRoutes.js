@@ -26,7 +26,7 @@ router.get("/events", requireAuth, listEvents);
 router.get("/score/:interviewId", requireAuth, getIntegrityScore);
 
 // Interviews and reporting
-router.get("/interviews", requireAuth, listInterviews); // Changed from requireRole('admin')
-router.get("/report/:interviewId", requireAuth, generateReport);
+router.get("/interviews", requireRole("interviewer"), listInterviews);
+router.get("/report/:interviewId", requireRole("interviewer"), generateReport);
 
 export default router;

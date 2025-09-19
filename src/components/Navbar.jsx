@@ -50,7 +50,7 @@ export default function Navbar() {
               to="/interviewer"
               className="text-base text-gray-300 hover:text-indigo-400 font-medium px-3 py-1 rounded transition"
             >
-              Interviewer
+              Interview Console
             </Link>
           )}
           {user && (user.role === "interviewer" || user.role === "admin") && (
@@ -66,7 +66,7 @@ export default function Navbar() {
               to="/candidate"
               className="text-base text-gray-300 hover:text-indigo-400 font-medium px-3 py-1 rounded transition"
             >
-              Candidate
+              Candidate Console
             </Link>
           )}
           {user && (

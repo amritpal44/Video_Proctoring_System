@@ -324,13 +324,37 @@ export async function generateReport(req, res) {
     const durationMs = endTime - startTime;
     const durationMinutes = Math.floor(durationMs / 60000);
 
+    // Helper to format a date into India time (IST)
+    function formatToIST(d) {
+      if (!d) return null;
+      try {
+        const date = new Date(d);
+        // e.g. "19 Sep 2025, 20:34:12 IST" using toLocaleString with Asia/Kolkata
+        const opts = {
+          timeZone: "Asia/Kolkata",
+          year: "numeric",
+          month: "short",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hour12: false,
+        };
+        const human = date.toLocaleString("en-IN", opts);
+        // produce an ISO-like string adjusted to IST by deriving parts
+        return human + " IST";
+      } catch (e) {
+        return new Date(d).toString();
+      }
+    }
+
     const report = {
       interview: {
         id: interview._id,
         sessionId: interview.sessionId,
         title: interview.title,
-        startTime,
-        endTime: interview.endTime,
+        startTime: formatToIST(startTime),
+        endTime: formatToIST(endTime),
         duration: `${durationMinutes} minutes`,
       },
       candidate: interview.candidate
@@ -353,7 +377,11 @@ export async function generateReport(req, res) {
         multipleFaces: eventCounts.multiple_faces_detected || 0,
         suspiciousObjects: eventCounts.suspicious_object_detected || 0,
       },
-      eventTimeline,
+      // convert timeline timestamps to IST strings
+      eventTimeline: eventTimeline.map((e) => ({
+        ...e,
+        timestamp: formatToIST(e.timestamp),
+      })),
       generatedAt: new Date(),
     };
 

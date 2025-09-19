@@ -88,3 +88,32 @@ export function getSession(req, res) {
     interviewer: s.interviewer ? { name: s.interviewer.name } : null,
   });
 }
+
+// update interview title both in-memory and in Interview document
+export async function updateSessionTitle(req, res) {
+  try {
+    const { sessionId } = req.params;
+    const { title } = req.body;
+    if (!title) return res.status(400).json({ error: "missing_title" });
+
+    const s = sessions[sessionId];
+    if (!s) return res.status(404).json({ error: "session_not_found" });
+
+    // update in-memory session
+    s.interviewTitle = title;
+
+    // if interview doc exists, update it
+    if (s.interviewId) {
+      await Interview.findByIdAndUpdate(
+        s.interviewId,
+        { title },
+        { new: true }
+      );
+    }
+
+    return res.json({ ok: true, title });
+  } catch (err) {
+    console.error("updateSessionTitle error", err);
+    return res.status(500).json({ error: "server_error" });
+  }
+}

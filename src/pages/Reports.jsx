@@ -56,13 +56,23 @@ export default function ReportsPage() {
       rows.push(["Integrity Score", payload.report.integrityScore]);
       rows.push([]);
       rows.push(["Timeline: timestamp", "type", "severity", "details"]);
+      // timeline timestamps may already be formatted strings (IST). Be tolerant.
       payload.report.eventTimeline.forEach((e) => {
-        rows.push([
-          new Date(e.timestamp).toISOString(),
-          e.type,
-          e.severity,
-          JSON.stringify(e.details || ""),
-        ]);
+        let ts = e.timestamp;
+        try {
+          if (typeof ts === "string") {
+            // assume formatted already (e.g., '19 Sep 2025, 20:34:12 IST')
+            // use as-is
+          } else if (ts) {
+            const d = new Date(ts);
+            if (!isNaN(d)) ts = d.toISOString();
+            else ts = String(e.timestamp);
+          } else ts = "";
+        } catch (err) {
+          ts = String(e.timestamp);
+        }
+
+        rows.push([ts, e.type, e.severity, JSON.stringify(e.details || "")]);
       });
 
       const csv = rows
