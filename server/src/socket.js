@@ -144,7 +144,36 @@ export function registerSocketHandlers(io) {
           (socket.user && socket.user.name) || name || session.candidate.name;
         session.candidate.socketId = socket.id;
         session.candidate.connected = true;
-        if (socket.user) session.candidate.userId = socket.user.id;
+        if (socket.user) {
+          session.candidate.userId = socket.user.id;
+          // persist candidate id into Interview document if we have an interviewId
+          try {
+            if (session.interviewId) {
+              // set candidate and startTime (if not already set)
+              Interview.findByIdAndUpdate(
+                session.interviewId,
+                {
+                  candidate: socket.user.id,
+                  $setOnInsert: { startTime: new Date() },
+                },
+                { new: true }
+              )
+                .then((doc) =>
+                  console.log(
+                    `[io] linked candidate ${socket.user.id} to interview ${session.interviewId}`
+                  )
+                )
+                .catch((e) =>
+                  console.warn(
+                    "[io] failed to link candidate to interview",
+                    e.message
+                  )
+                );
+            }
+          } catch (e) {
+            console.warn("[io] error updating interview candidate", e.message);
+          }
+        }
         console.log(`[session:${sessionId}] candidate joined (${socket.id})`);
       } else {
         socket.emit("signal_error", { msg: "Invalid role" });

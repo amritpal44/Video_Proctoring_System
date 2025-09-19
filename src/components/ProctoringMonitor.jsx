@@ -105,9 +105,12 @@ export default function ProctoringMonitor({
               console.warn("ProctoringMonitor draw error", e);
             }
           },
-          detectionIntervalMs: 500,
-          noFaceThresholdMs: 10000,
-          lookingAwayThresholdMs: 5000,
+          // tune intervals: object detection is faster for suspicious objects
+          objectDetectionIntervalMs: 550,
+          faceDetectionIntervalMs: 500,
+          noFaceThresholdMs: 8000,
+          // make looking-away fast and snappy
+          lookingAwayThresholdMs: 800,
         });
 
         detectorRef.current = detector;
@@ -119,17 +122,8 @@ export default function ProctoringMonitor({
           return;
         }
 
-        // Start detection when video is ready
-        // only start detection if modelsLoaded is true and video stream present
-        if (
-          detector.modelsLoaded &&
-          videoRef?.current &&
-          videoRef.current.srcObject
-        ) {
-          detector.startDetection(videoRef.current, canvasRef.current);
-        } else if (!videoRef?.current || !videoRef.current.srcObject) {
-          setError("No video stream found. Please start the camera.");
-        }
+        // Don't start detection here; the separate effect watching videoRef.srcObject
+        // will start/stop detection once the video stream becomes available.
       } catch (e) {
         setError("Error initializing proctoring: " + e.message);
         console.error(e);

@@ -13,9 +13,14 @@ export class ProctoringDetector {
 
     // Configuration
     this.config = {
-      detectionIntervalMs: options.detectionIntervalMs || 500,
+      // Per-type detection intervals (object detection is faster)
+      objectDetectionIntervalMs:
+        options.objectDetectionIntervalMs || options.detectionIntervalMs || 200,
+      faceDetectionIntervalMs:
+        options.faceDetectionIntervalMs || options.detectionIntervalMs || 400,
       noFaceThresholdMs: options.noFaceThresholdMs || 10000,
-      lookingAwayThresholdMs: options.lookingAwayThresholdMs || 5000,
+      // default to a faster looking-away threshold (1s) for snappier reactions
+      lookingAwayThresholdMs: options.lookingAwayThresholdMs || 1000,
       centerThreshold: options.centerThreshold || 0.25,
       suspiciousObjects: options.suspiciousObjects || [
         "cell phone",
@@ -45,9 +50,14 @@ export class ProctoringDetector {
     this.onFrame = options.onFrame || (() => {});
     this._lastFaceCount = 0;
     this._lastObjectCount = 0;
+    this._lastFaceSnapshot = [];
+    this._lastObjectSnapshot = [];
     this._noFaceStreak = 0;
     this._triedFullModel = false;
     this._recreating = false;
+    this._objectInterval = null;
+    this._faceInterval = null;
+    this._offscreenCanvas = null;
   }
 
   async initialize() {
@@ -94,25 +104,105 @@ export class ProctoringDetector {
       return;
     }
 
-    this.stopDetection();
+    // If detection already running, don't start again
+    if (this._objectInterval || this._faceInterval) {
+      console.debug(
+        "ProctoringDetector: detection already running, skip start"
+      );
+      return;
+    }
 
-    this.detectionInterval = setInterval(async () => {
-      await this.runDetection(videoElement, canvasElement);
-    }, this.config.detectionIntervalMs);
+    // If video not ready, skip start (caller should retry)
+    if (!videoElement || videoElement.readyState < 2) {
+      console.debug("ProctoringDetector: video not ready, skip start");
+      return;
+    }
+
+    // Start object detection interval (higher frequency)
+    this._objectInterval = setInterval(async () => {
+      try {
+        // guard: if video has zero size (e.g., candidate left) skip detection
+        if (
+          !videoElement ||
+          !videoElement.videoWidth ||
+          !videoElement.videoHeight
+        ) {
+          // nothing to detect
+          return;
+        }
+        const objects = await this.detectObjects(videoElement);
+        this._lastObjectCount = objects ? objects.length : 0;
+        this._lastObjectSnapshot = objects || [];
+
+        // call onFrame to update UI overlay with latest objects and last faces snapshot
+        try {
+          this.onFrame({
+            faces: this._lastFaceSnapshot || [],
+            objects: this._lastObjectSnapshot || [],
+            timestamp: new Date().toISOString(),
+          });
+        } catch (e) {
+          console.warn("onFrame handler error (object tick)", e);
+        }
+      } catch (e) {
+        console.error("Object detection tick error", e);
+      }
+    }, this.config.objectDetectionIntervalMs);
+
+    // Start face detection interval (lower frequency)
+    this._faceInterval = setInterval(async () => {
+      try {
+        if (
+          !videoElement ||
+          !videoElement.videoWidth ||
+          !videoElement.videoHeight
+        ) {
+          return;
+        }
+        const faces = await this.detectFaces(
+          videoElement,
+          videoElement.videoWidth,
+          videoElement.videoHeight,
+          this._lastObjectSnapshot
+        );
+        this._lastFaceCount = faces ? faces.length : 0;
+        this._lastFaceSnapshot = faces || [];
+
+        // call onFrame to update UI overlay with latest faces and objects
+        try {
+          this.onFrame({
+            faces: this._lastFaceSnapshot || [],
+            objects: this._lastObjectSnapshot || [],
+            timestamp: new Date().toISOString(),
+          });
+        } catch (e) {
+          console.warn("onFrame handler error (face tick)", e);
+        }
+      } catch (e) {
+        console.error("Face detection tick error", e);
+      }
+    }, this.config.faceDetectionIntervalMs);
 
     this.logEvent("detection_started", "Proctoring detection started");
   }
 
   stopDetection() {
-    if (this.detectionInterval) {
-      clearInterval(this.detectionInterval);
-      this.detectionInterval = null;
-      this.logEvent("detection_stopped", "Proctoring detection stopped");
+    if (this._objectInterval) {
+      clearInterval(this._objectInterval);
+      this._objectInterval = null;
     }
+    if (this._faceInterval) {
+      clearInterval(this._faceInterval);
+      this._faceInterval = null;
+    }
+    this.logEvent("detection_stopped", "Proctoring detection stopped");
   }
 
   async runDetection(videoElement, canvasElement) {
     if (!videoElement || videoElement.readyState < 2) return;
+
+    // ensure video has valid pixel dimensions before running models
+    if (!videoElement.videoWidth || !videoElement.videoHeight) return;
 
     try {
       const videoWidth = videoElement.videoWidth;
@@ -226,6 +316,10 @@ export class ProctoringDetector {
     // Try full-frame detection first
     let faces = [];
     try {
+      // skip if video size invalid
+      if (!videoWidth || !videoHeight) {
+        return [];
+      }
       faces = await this.faceDetector.estimateFaces(videoElement);
     } catch (e) {
       console.warn("ProctoringDetector: full-frame face estimate failed", e);
@@ -337,6 +431,7 @@ export class ProctoringDetector {
   async _detectFacesInBBox(videoElement, bbox, videoWidth, videoHeight) {
     try {
       if (!bbox || bbox.length < 4) return [];
+      if (!videoWidth || !videoHeight) return [];
       const [bx, by, bw, bh] = bbox.map((n) => Math.round(n));
 
       // clamp region
@@ -351,7 +446,10 @@ export class ProctoringDetector {
       const targetW = Math.round(w * scale);
       const targetH = Math.round(h * scale);
 
-      const off = document.createElement("canvas");
+      // reuse an offscreen canvas to avoid allocations
+      if (!this._offscreenCanvas)
+        this._offscreenCanvas = document.createElement("canvas");
+      const off = this._offscreenCanvas;
       off.width = targetW;
       off.height = targetH;
       const ctx = off.getContext("2d");
