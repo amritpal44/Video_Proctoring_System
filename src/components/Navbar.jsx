@@ -53,6 +53,14 @@ export default function Navbar() {
               Interviewer
             </Link>
           )}
+          {user && (user.role === "interviewer" || user.role === "admin") && (
+            <Link
+              to="/reports"
+              className="text-base text-gray-300 hover:text-indigo-400 font-medium px-3 py-1 rounded transition"
+            >
+              Reports
+            </Link>
+          )}
           {(!user || user.role === "candidate") && (
             <Link
               to="/candidate"

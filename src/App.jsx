@@ -3,6 +3,7 @@ import React, { useContext } from "react";
 import { BrowserRouter, Routes, Route, Link } from "react-router-dom";
 import InterviewerRTC from "./components/InterviewerRTC";
 import CandidateRTC from "./components/CandidateRTC";
+import ReportsPage from "./pages/Reports";
 import { AuthProvider, AuthContext } from "./contexts/AuthContext";
 import LoginPage from "./pages/LoginPage";
 import SignupPage from "./pages/SignupPage";
@@ -22,6 +23,7 @@ function App() {
               <Route path="/signup" element={<SignupPage />} />
               <Route path="/" element={<LandingPage />} />
               <Route path="/interviewer" element={<ProtectedInterviewer />} />
+              <Route path="/reports" element={<ReportsPage />} />
 
               <Route path="/candidate" element={<CandidateWrapper />} />
             </Routes>

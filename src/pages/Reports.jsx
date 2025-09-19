@@ -1,0 +1,159 @@
+import React, { useEffect, useState, useContext } from "react";
+import { AuthContext } from "../contexts/AuthContext";
+
+export default function ReportsPage() {
+  const { user } = useContext(AuthContext);
+  const [interviews, setInterviews] = useState([]);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!user) return;
+    fetchInterviews();
+  }, [user]);
+
+  async function fetchInterviews() {
+    setLoading(true);
+    try {
+      const res = await fetch(
+        `${
+          import.meta.env.VITE_BACKEND_URL || "http://localhost:4000"
+        }/api/proctor/interviews`,
+        {
+          credentials: "include",
+        }
+      );
+      const j = await res.json();
+      if (res.ok) setInterviews(j.interviews || []);
+    } catch (e) {
+      console.warn("fetchInterviews failed", e);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function downloadCSV(interviewId, sessionId, candidateName) {
+    try {
+      const url = `${
+        import.meta.env.VITE_BACKEND_URL || "http://localhost:4000"
+      }/api/proctor/report/${interviewId}`;
+      const res = await fetch(url, { credentials: "include" });
+      if (!res.ok) {
+        const j = await res.json().catch(() => null);
+        alert("Failed to generate report: " + (j?.error || res.statusText));
+        return;
+      }
+      const payload = await res.json();
+      // Convert JSON report to CSV rows
+      const rows = [];
+      rows.push(["Interview ID", payload.report.interview.id]);
+      rows.push(["Session ID", payload.report.interview.sessionId]);
+      rows.push(["Title", payload.report.interview.title || ""]);
+      rows.push(["Candidate", payload.report.candidate?.name || ""]);
+      rows.push(["Interviewer", payload.report.interviewer?.name || ""]);
+      rows.push(["Start Time", payload.report.interview.startTime || ""]);
+      rows.push(["End Time", payload.report.interview.endTime || ""]);
+      rows.push(["Duration", payload.report.interview.duration || ""]);
+      rows.push(["Integrity Score", payload.report.integrityScore]);
+      rows.push([]);
+      rows.push(["Timeline: timestamp", "type", "severity", "details"]);
+      payload.report.eventTimeline.forEach((e) => {
+        rows.push([
+          new Date(e.timestamp).toISOString(),
+          e.type,
+          e.severity,
+          JSON.stringify(e.details || ""),
+        ]);
+      });
+
+      const csv = rows
+        .map((r) => r.map((c) => `"${(c + "").replace(/"/g, '""')}"`).join(","))
+        .join("\n");
+
+      const blob = new Blob([csv], { type: "text/csv" });
+      const href = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = href;
+      a.download = `${(candidateName || sessionId || interviewId).replace(
+        /[^a-z0-9-_\.]/gi,
+        "_"
+      )}_report.csv`;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(href);
+    } catch (e) {
+      console.error("downloadCSV error", e);
+      alert("Failed to download report");
+    }
+  }
+
+  if (!user) {
+    return (
+      <div className="p-6 bg-gray-800 rounded text-gray-300 h-full">
+        <h3 className="text-3xl font-bold">Access required</h3>
+        <p className="text-xl text-gray-400">Please login to view reports.</p>
+      </div>
+    );
+  }
+
+  if (user.role !== "interviewer" && user.role !== "admin") {
+    return (
+      <div className="p-6 bg-gray-800 rounded text-gray-300 h-full">
+        <h3 className="text-3xl font-bold">Insufficient permissions</h3>
+        <p className="text-xl text-gray-400">
+          You don't have access to reports.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-6">
+      <h2 className="text-2xl font-bold text-white mb-4">
+        Interviews & Reports
+      </h2>
+      <div className="bg-gray-800 rounded p-4">
+        {loading ? (
+          <div className="text-gray-300">Loading...</div>
+        ) : (
+          <div className="space-y-3">
+            {interviews.length === 0 && (
+              <div className="text-gray-400">No interviews found.</div>
+            )}
+            {interviews.map((iv) => (
+              <div
+                key={iv._id}
+                className="flex items-center justify-between bg-gray-900/60 p-3 rounded"
+              >
+                <div>
+                  <div className="text-white font-semibold">
+                    {iv.title || iv.sessionId}
+                  </div>
+                  <div className="text-gray-400 text-sm">
+                    Session: <span className="font-mono">{iv.sessionId}</span>
+                  </div>
+                  <div className="text-gray-400 text-sm">
+                    Candidate: {iv.candidate?.name || "—"}
+                  </div>
+                  <div className="text-gray-400 text-sm">
+                    Score: {iv.integrityScore ?? "—"}
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() =>
+                      downloadCSV(iv._id, iv.sessionId, iv.candidate?.name)
+                    }
+                    className="px-3 py-1 bg-indigo-600 text-white rounded"
+                  >
+                    Download CSV
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
