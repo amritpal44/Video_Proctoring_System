@@ -179,32 +179,52 @@ export async function getIntegrityScore(req, res) {
 
 export async function listInterviews(req, res) {
   try {
-    const { q, from, to, candidateEmail, interviewerEmail } = req.query;
+    let { q, from, to, candidateEmail, interviewerEmail, minScore } = req.query;
     const filter = {};
 
-    if (q) {
-      filter.$or = [
-        { title: new RegExp(q, "i") },
-        { sessionId: new RegExp(q, "i") },
-      ];
+    // Default date range: past 1 week to now
+    const now = new Date();
+    const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    // Parse date-only inputs as full-day UTC ranges to be intuitive for users.
+    // from -> YYYY-MM-DD => YYYY-MM-DDT00:00:00.000Z
+    // to   -> YYYY-MM-DD => YYYY-MM-DDT23:59:59.999Z
+    let fromDate;
+    let toDate;
+    try {
+      if (from) {
+        const maybe = new Date(`${String(from).trim()}T00:00:00.000Z`);
+        fromDate = isNaN(maybe) ? oneWeekAgo : maybe;
+      } else {
+        fromDate = oneWeekAgo;
+      }
+
+      if (to) {
+        const maybe2 = new Date(`${String(to).trim()}T23:59:59.999Z`);
+        toDate = isNaN(maybe2) ? now : maybe2;
+      } else {
+        toDate = now;
+      }
+    } catch (e) {
+      fromDate = oneWeekAgo;
+      toDate = now;
     }
 
-    if (from || to) filter.startTime = {};
-    if (from) filter.startTime.$gte = new Date(from);
-    if (to) filter.startTime.$lte = new Date(to);
+    // Match interviews where either startTime (if present) or createdAt falls within range
+    filter.$or = [
+      { startTime: { $gte: fromDate, $lte: toDate } },
+      { createdAt: { $gte: fromDate, $lte: toDate } },
+    ];
 
-    // Pre-filter by email if provided
-    let candidateIds = null;
-    let interviewerIds = null;
-
+    // Pre-filter by email if provided (keeps DB-side filtering)
     if (candidateEmail) {
       const User = (await import("../models/User.js")).default;
       const candidates = await User.find({
         email: new RegExp(candidateEmail, "i"),
         role: "candidate",
       }).select("_id");
-      candidateIds = candidates.map((c) => c._id);
-      filter.candidate = { $in: candidateIds };
+      const candidateIds = candidates.map((c) => c._id);
+      if (candidateIds.length) filter.candidate = { $in: candidateIds };
     }
 
     if (interviewerEmail) {
@@ -213,16 +233,17 @@ export async function listInterviews(req, res) {
         email: new RegExp(interviewerEmail, "i"),
         role: { $in: ["interviewer", "admin"] },
       }).select("_id");
-      interviewerIds = interviewers.map((i) => i._id);
-      filter.interviewer = { $in: interviewerIds };
+      const interviewerIds = interviewers.map((i) => i._id);
+      if (interviewerIds.length) filter.interviewer = { $in: interviewerIds };
     }
 
+    // Fetch interviews matching coarse filters
     const interviews = await Interview.find(filter)
       .populate("candidate interviewer", "name email")
       .sort({ startTime: -1 })
       .limit(200);
 
-    // Add integrity scores to each interview
+    // Compute integrity score for each interview
     const interviewsWithScores = await Promise.all(
       interviews.map(async (interview) => {
         const events = await ProctorEvent.find({ interview: interview._id });
@@ -256,7 +277,36 @@ export async function listInterviews(req, res) {
       })
     );
 
-    return res.json({ interviews: interviewsWithScores });
+    // Apply q search across multiple fields (title, sessionId, candidate/interviewer name/email)
+    let filtered = interviewsWithScores;
+    if (q && String(q).trim()) {
+      const rx = new RegExp(String(q).trim(), "i");
+      filtered = filtered.filter((iv) => {
+        if (rx.test(iv.title || "")) return true;
+        if (rx.test(iv.sessionId || "")) return true;
+        if (
+          iv.candidate &&
+          (rx.test(iv.candidate.name || "") ||
+            rx.test(iv.candidate.email || ""))
+        )
+          return true;
+        if (
+          iv.interviewer &&
+          (rx.test(iv.interviewer.name || "") ||
+            rx.test(iv.interviewer.email || ""))
+        )
+          return true;
+        return false;
+      });
+    }
+
+    // Filter by minScore (default 75)
+    const min = parseInt(minScore ?? 75, 10);
+    filtered = filtered.filter((iv) =>
+      typeof iv.integrityScore === "number" ? iv.integrityScore >= min : true
+    );
+
+    return res.json({ interviews: filtered });
   } catch (err) {
     console.error("listInterviews error", err);
     return res.status(500).json({ error: "server_error" });

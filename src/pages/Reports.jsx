@@ -5,23 +5,37 @@ export default function ReportsPage() {
   const { user } = useContext(AuthContext);
   const [interviews, setInterviews] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [searchQ, setSearchQ] = useState("");
+  const [startDate, setStartDate] = useState(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 7);
+    return d.toISOString().slice(0, 10);
+  });
+  const [endDate, setEndDate] = useState(() =>
+    new Date().toISOString().slice(0, 10)
+  );
+  const [minScore, setMinScore] = useState(75);
 
   useEffect(() => {
     if (!user) return;
     fetchInterviews();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   async function fetchInterviews() {
     setLoading(true);
     try {
-      const res = await fetch(
+      const params = new URLSearchParams();
+      if (searchQ) params.set("q", searchQ);
+      if (startDate) params.set("from", startDate);
+      if (endDate) params.set("to", endDate);
+      if (minScore) params.set("minScore", String(minScore));
+
+      const url =
         `${
           import.meta.env.VITE_BACKEND_URL || "http://localhost:4000"
-        }/api/proctor/interviews`,
-        {
-          credentials: "include",
-        }
-      );
+        }/api/proctor/interviews?` + params.toString();
+      const res = await fetch(url, { credentials: "include" });
       const j = await res.json();
       if (res.ok) setInterviews(j.interviews || []);
     } catch (e) {
@@ -29,6 +43,10 @@ export default function ReportsPage() {
     } finally {
       setLoading(false);
     }
+  }
+
+  function doSearch() {
+    fetchInterviews();
   }
 
   async function downloadCSV(interviewId, sessionId, candidateName) {
@@ -123,6 +141,67 @@ export default function ReportsPage() {
         Interviews & Reports
       </h2>
       <div className="bg-gray-800 rounded p-4">
+        {/* Filter bar */}
+        <div className="flex flex-wrap gap-3 items-end mb-4">
+          <input
+            placeholder="Search sessionId, title, candidate or email"
+            value={searchQ}
+            onChange={(e) => setSearchQ(e.target.value)}
+            className="px-3 py-2 rounded bg-gray-700 text-white border border-gray-600 w-64"
+          />
+          <div>
+            <label className="text-xs text-gray-300 block">Start</label>
+            <input
+              type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
+              className="px-3 py-2 rounded bg-gray-700 text-white border border-gray-600"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-gray-300 block">End</label>
+            <input
+              type="date"
+              value={endDate}
+              onChange={(e) => setEndDate(e.target.value)}
+              className="px-3 py-2 rounded bg-gray-700 text-white border border-gray-600"
+            />
+          </div>
+          <div>
+            <label className="text-xs text-gray-300 block">Min Score</label>
+            <input
+              type="number"
+              min={0}
+              max={100}
+              value={minScore}
+              onChange={(e) => setMinScore(Number(e.target.value))}
+              className="w-20 px-3 py-2 rounded bg-gray-700 text-white border border-gray-600"
+            />
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={doSearch}
+              className="px-3 py-2 bg-indigo-600 text-white rounded"
+            >
+              Search
+            </button>
+            <button
+              onClick={() => {
+                // reset to defaults
+                setSearchQ("");
+                const d = new Date();
+                d.setDate(d.getDate() - 7);
+                setStartDate(d.toISOString().slice(0, 10));
+                setEndDate(new Date().toISOString().slice(0, 10));
+                setMinScore(75);
+                setTimeout(() => fetchInterviews(), 50);
+              }}
+              className="px-3 py-2 bg-gray-600 text-white rounded"
+            >
+              Reset
+            </button>
+          </div>
+        </div>
         {loading ? (
           <div className="text-gray-300">Loading...</div>
         ) : (
